@@ -77,8 +77,14 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/register", async (req, res, next) => {
+  // Admin-only user registration
+  app.post("/api/admin/users", async (req, res, next) => {
     try {
+      // Check if the current user is an admin
+      if (!req.isAuthenticated() || req.user.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can create new users" });
+      }
+
       const existingUser = await storage.getUserByUsername(req.body.username);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
@@ -86,6 +92,39 @@ export function setupAuth(app: Express) {
 
       const user = await storage.createUser({
         ...req.body,
+        password: await hashPassword(req.body.password),
+      });
+
+      // Strip password from response
+      const { password, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Legacy register endpoint for initial admin setup only
+  app.post("/api/register", async (req, res, next) => {
+    try {
+      // Check if there are any users in the system
+      const userCount = await storage.getUserCount();
+      
+      // Only allow registration if there are no users yet (first admin setup)
+      if (userCount > 0) {
+        return res.status(403).json({ 
+          message: "Registration is disabled. Please contact an administrator."
+        });
+      }
+
+      const existingUser = await storage.getUserByUsername(req.body.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
+      // Force the first user to be an admin
+      const user = await storage.createUser({
+        ...req.body,
+        role: "admin",
         password: await hashPassword(req.body.password),
       });
 

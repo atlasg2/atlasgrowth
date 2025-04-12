@@ -7,16 +7,37 @@ export const contractors = pgTable("contractors", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  placeId: text("place_id").unique(), // Google Places ID as unique identifier
+  siteUrl: text("site_url"), // Custom site URL for the contractor
+  yearFounded: text("year_founded"),
   email: text("email").notNull(),
   phone: text("phone"),
+  phoneType: text("phone_type"), // Type of phone (mobile, landline, etc)
   address: text("address"),
+  street: text("street"),
   city: text("city"),
   state: text("state"),
   zip: text("zip"),
+  latitude: text("latitude"),
+  longitude: text("longitude"),
+  rating: text("rating"), // Business rating
+  reviewCount: text("review_count"), // Number of reviews
+  reviewsLink: text("reviews_link"), // Link to reviews
+  workingHours: text("working_hours"), // JSON string of working hours
+  acceptsCreditCards: boolean("accepts_credit_cards"),
   logo: text("logo"),
+  verifiedLocation: boolean("verified_location"),
+  locationLink: text("location_link"),
+  facebook: text("facebook"),
+  instagram: text("instagram"),
+  linkedin: text("linkedin"),
+  twitter: text("twitter"),
+  website: text("website"),
+  websiteTitle: text("website_title"),
+  websiteGenerator: text("website_generator"),
+  websiteKeywords: text("website_keywords"),
   primaryColor: text("primary_color").default("#2563EB"),
   active: boolean("active").default(true),
-  website: text("website"),
   description: text("description"),
   createdById: integer("created_by_id").references(() => users.id),
 });

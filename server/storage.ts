@@ -13,7 +13,8 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { db } from "./db";
 import { pool } from "./db";
-import { eq, and, desc, lte, gte } from "drizzle-orm";
+import { eq, and, desc, lte, gte, count } from "drizzle-orm";
+import createMemoryStore from "memorystore";
 
 const PostgresSessionStore = connectPg(session);
 
@@ -22,6 +23,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getUserCount(): Promise<number>;
   
   // Contractors
   getContractor(id: number): Promise<Contractor | undefined>;
@@ -173,6 +175,10 @@ export class MemStorage implements IStorage {
     const user: User = { ...insertUser, id };
     this.users.set(id, user);
     return user;
+  }
+  
+  async getUserCount(): Promise<number> {
+    return this.users.size;
   }
 
   // Contractor methods
@@ -579,6 +585,11 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
+  }
+  
+  async getUserCount(): Promise<number> {
+    const result = await db.select({ count: count() }).from(users);
+    return Number(result[0].count) || 0;
   }
 
   // Contractor methods
