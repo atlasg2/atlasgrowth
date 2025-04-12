@@ -24,6 +24,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUserCount(): Promise<number>;
+  getAllUsers(): Promise<User[]>;
   
   // Contractors
   getContractor(id: number): Promise<Contractor | undefined>;
@@ -179,6 +180,10 @@ export class MemStorage implements IStorage {
   
   async getUserCount(): Promise<number> {
     return this.users.size;
+  }
+  
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
   }
 
   // Contractor methods
@@ -590,6 +595,10 @@ export class DatabaseStorage implements IStorage {
   async getUserCount(): Promise<number> {
     const result = await db.select({ count: count() }).from(users);
     return Number(result[0].count) || 0;
+  }
+  
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 
   // Contractor methods

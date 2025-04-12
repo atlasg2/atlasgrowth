@@ -3,11 +3,81 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { format } from "date-fns";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
+
+const scryptAsync = promisify(scrypt);
+
+async function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${buf.toString("hex")}.${salt}`;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
   setupAuth(app);
 
+  // Admin User Management
+  app.get("/api/admin/users", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+    
+    const users = await storage.getAllUsers();
+    
+    // Remove passwords from response
+    const sanitizedUsers = users.map(user => {
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    });
+    
+    res.json(sanitizedUsers);
+  });
+  
+  // Create contractor user
+  app.post("/api/admin/users", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+    
+    const { username, password, email, firstName, lastName, contractorId, role = "contractor" } = req.body;
+    
+    // Validate inputs
+    if (!username || !password || !email) {
+      return res.status(400).json({ message: "Username, password, and email are required" });
+    }
+    
+    // Check if user already exists
+    const existingUser = await storage.getUserByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({ message: "Username already exists" });
+    }
+    
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+    
+    try {
+      // Create user with contractor role
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword,
+        email,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        role,
+        active: true,
+        contractorId: contractorId || null,
+      });
+      
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+      
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      res.status(500).json({ message: "Error creating user" });
+    }
+  });
+  
   // Contractors
   app.get("/api/contractors", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
