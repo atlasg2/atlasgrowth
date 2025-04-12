@@ -1,143 +1,182 @@
 import { useAuth } from "@/hooks/use-auth";
-import MainLayout from "@/components/layout/main-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/utils";
-import { Building, Users, CreditCard, TrendingUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import AdminLayout from "@/components/layout/admin-layout";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Building2,
+  Users,
+  Star,
+  Calendar,
+  Briefcase,
+  FileText,
+} from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
 
-  // Sample data for demonstration
-  const stats = {
-    totalContractors: 24,
-    activeContractors: 18,
-    monthlyRevenue: 12650,
-    totalUsers: 42
-  };
+  const { data: contractors = [], isLoading: contractorsLoading } = useQuery({
+    queryKey: ["/api/contractors"],
+    enabled: !!user && user.role === "admin",
+  });
+
+  const { data: users = [], isLoading: usersLoading } = useQuery({
+    queryKey: ["/api/admin/users"],
+    enabled: !!user && user.role === "admin",
+  });
+
+  const isLoading = contractorsLoading || usersLoading;
+
+  if (user?.role !== "admin") {
+    return (
+      <AdminLayout>
+        <div className="container mx-auto p-6">
+          <h1 className="text-3xl font-bold mb-6">Access Denied</h1>
+          <p>You do not have permission to view this page.</p>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
-    <MainLayout>
-      {/* Page header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-      </div>
+    <AdminLayout>
+      <div className="container mx-auto p-6">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <p className="text-muted-foreground">
+            Overview of your HVAC contractor management platform
+          </p>
+        </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {/* Total Contractors Card */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Total Contractors</p>
-                <p className="text-2xl font-bold mt-1">{stats.totalContractors}</p>
-                <p className="text-xs text-green-600 mt-1">+9% from last month</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <Building className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Active Contractors Card */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Active Contractors</p>
-                <p className="text-2xl font-bold mt-1">{stats.activeContractors}</p>
-                <p className="text-xs text-green-600 mt-1">75% activation rate</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                <Building className="h-5 w-5 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Monthly Revenue Card */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Monthly Revenue</p>
-                <p className="text-2xl font-bold mt-1">{formatCurrency(stats.monthlyRevenue)}</p>
-                <p className="text-xs text-green-600 mt-1">+10% from last month</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <CreditCard className="h-5 w-5 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Total Users Card */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 font-medium">Total Users</p>
-                <p className="text-2xl font-bold mt-1">{stats.totalUsers}</p>
-                <p className="text-xs text-green-600 mt-1">+5% from last month</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-                <Users className="h-5 w-5 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Activities */}
-      <Card>
-        <CardHeader>
-          <CardTitle>System Activities</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center mr-3">
-                <Building className="h-4 w-4 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">New contractor registered</p>
-                <p className="text-xs text-gray-500">Cool Air Services - 2 hours ago</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                <Users className="h-4 w-4 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">New user account created</p>
-                <p className="text-xs text-gray-500">John Smith - 5 hours ago</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center mr-3">
-                <CreditCard className="h-4 w-4 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Subscription payment received</p>
-                <p className="text-xs text-gray-500">Comfort Climate - 1 day ago</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center mr-3">
-                <TrendingUp className="h-4 w-4 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Contractor upgraded to pro plan</p>
-                <p className="text-xs text-gray-500">Premier HVAC Solutions - 2 days ago</p>
-              </div>
-            </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
           </div>
-        </CardContent>
-      </Card>
-    </MainLayout>
+        ) : (
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Total Contractors
+                  </CardTitle>
+                  <Building2 className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">
+                    {contractors.length}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Active contractor accounts
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Total Users
+                  </CardTitle>
+                  <Users className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">{users.length}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Registered system users
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Admin Users
+                  </CardTitle>
+                  <Star className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">
+                    {users.filter((u) => u.role === "admin").length}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Users with admin privileges
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Links</CardTitle>
+                  <CardDescription>
+                    Access key administrative functions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <a
+                      href="/admin/contractors"
+                      className="flex flex-col items-center p-4 border rounded-lg hover:bg-accent transition-colors"
+                    >
+                      <Building2 className="h-8 w-8 mb-2 text-primary" />
+                      <span className="text-sm font-medium">
+                        Manage Contractors
+                      </span>
+                    </a>
+                    <a
+                      href="/admin/users"
+                      className="flex flex-col items-center p-4 border rounded-lg hover:bg-accent transition-colors"
+                    >
+                      <Users className="h-8 w-8 mb-2 text-primary" />
+                      <span className="text-sm font-medium">Manage Users</span>
+                    </a>
+                    <div className="flex flex-col items-center p-4 border rounded-lg opacity-60">
+                      <Calendar className="h-8 w-8 mb-2 text-primary" />
+                      <span className="text-sm font-medium">Schedules</span>
+                      <span className="text-xs text-muted-foreground">
+                        Coming soon
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-center p-4 border rounded-lg opacity-60">
+                      <Briefcase className="h-8 w-8 mb-2 text-primary" />
+                      <span className="text-sm font-medium">Job Reports</span>
+                      <span className="text-xs text-muted-foreground">
+                        Coming soon
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Platform Statistics</CardTitle>
+                  <CardDescription>
+                    Overview of system usage and activity
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center p-8 text-muted-foreground">
+                    <FileText className="h-10 w-10 mx-auto mb-4 opacity-50" />
+                    <p>Detailed statistics will be available soon</p>
+                    <p className="text-sm mt-2">
+                      We're currently collecting data to provide insights on
+                      platform usage
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
+      </div>
+    </AdminLayout>
   );
 }

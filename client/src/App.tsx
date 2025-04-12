@@ -19,6 +19,7 @@ import TeamPage from "@/pages/team-page";
 import SettingsPage from "@/pages/settings-page";
 import AdminDashboardPage from "@/pages/admin/dashboard";
 import AdminContractorsPage from "@/pages/admin/contractors";
+import AdminUsersPage from "@/pages/admin/users";
 
 function Router() {
   return (
@@ -35,6 +36,7 @@ function Router() {
       <ProtectedRoute path="/settings" component={SettingsPage} />
       <ProtectedRoute path="/admin/dashboard" component={AdminDashboardPage} />
       <ProtectedRoute path="/admin/contractors" component={AdminContractorsPage} />
+      <ProtectedRoute path="/admin/users" component={AdminUsersPage} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

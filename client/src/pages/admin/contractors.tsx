@@ -1,260 +1,379 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Contractor } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
-import MainLayout from "@/components/layout/main-layout";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import AdminLayout from "@/components/layout/admin-layout";
 import { useToast } from "@/hooks/use-toast";
-
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useState } from "react";
+import { Loader2, Building2, Plus } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
+  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { 
-  SearchIcon, 
-  PlusIcon,
-  Building,
-  CalendarIcon,
-  UserPlusIcon,
-  CheckCircle,
-  XCircle,
-  MoreVertical,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
+// Define the form schema
+const formSchema = z.object({
+  name: z.string().min(2, "Contractor name must be at least 2 characters"),
+  slug: z.string().min(2, "Slug must be at least 2 characters")
+    .regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens"),
+  phone: z.string().optional(),
+  email: z.string().email("Please enter a valid email").optional().or(z.literal('')),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
+  website: z.string().url("Please enter a valid URL").optional().or(z.literal('')),
+});
+
+type FormValues = z.infer<typeof formSchema>;
 
 export default function AdminContractorsPage() {
-  const { user } = useAuth();
   const { toast } = useToast();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
 
-  // Sample contractors data
-  const contractors = [
-    {
-      id: 1,
-      name: "Cool Air Services",
-      slug: "cool-air-services",
-      email: "contact@coolairservices.com",
-      phone: "(555) 123-4567",
-      city: "Phoenix",
-      state: "AZ",
-      status: "active",
-      createdAt: "2023-01-15",
-      lastActive: "2023-05-01",
-    },
-    {
-      id: 2,
-      name: "Comfort Climate",
-      slug: "comfort-climate",
-      email: "info@comfortclimate.com",
-      phone: "(555) 234-5678",
-      city: "Atlanta",
-      state: "GA",
-      status: "active",
-      createdAt: "2023-02-10",
-      lastActive: "2023-05-02",
-    },
-    {
-      id: 3,
-      name: "Premier HVAC Solutions",
-      slug: "premier-hvac",
-      email: "support@premierhvac.com",
-      phone: "(555) 345-6789",
-      city: "Dallas",
-      state: "TX",
-      status: "inactive",
-      createdAt: "2023-03-05",
-      lastActive: "2023-04-15",
-    },
-    {
-      id: 4,
-      name: "Arctic Air Systems",
-      slug: "arctic-air",
-      email: "info@arcticair.com",
-      phone: "(555) 456-7890",
-      city: "Chicago",
-      state: "IL",
-      status: "active",
-      createdAt: "2023-03-22",
-      lastActive: "2023-05-03",
-    },
-    {
-      id: 5,
-      name: "Sunshine Heating & Cooling",
-      slug: "sunshine-hvac",
-      email: "contact@sunshinehvac.com",
-      phone: "(555) 567-8901",
-      city: "Miami",
-      state: "FL",
-      status: "active",
-      createdAt: "2023-04-01",
-      lastActive: "2023-05-02",
-    },
-  ];
-
-  // Filter contractors based on search query
-  const filteredContractors = contractors.filter(contractor => {
-    if (!searchQuery) return true;
-    
-    const query = searchQuery.toLowerCase();
-    return (
-      contractor.name.toLowerCase().includes(query) ||
-      contractor.email.toLowerCase().includes(query) ||
-      contractor.phone.includes(query) ||
-      contractor.city.toLowerCase().includes(query) ||
-      contractor.state.toLowerCase().includes(query)
-    );
+  const {
+    data: contractors = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["/api/contractors"],
+    enabled: !!user && user.role === "admin",
   });
 
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      slug: "",
+      phone: "",
+      email: "",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      website: "",
+    },
+  });
+
+  const createContractorMutation = useMutation({
+    mutationFn: async (data: FormValues) => {
+      const res = await apiRequest(
+        "POST",
+        "/api/contractors",
+        data
+      );
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Contractor created successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/contractors"] });
+      setOpen(false);
+      form.reset();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create contractor",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: FormValues) => {
+    createContractorMutation.mutate(data);
+  };
+
+  if (user?.role !== "admin") {
+    return (
+      <AdminLayout>
+        <div className="container mx-auto p-6">
+          <h1 className="text-3xl font-bold mb-6">Access Denied</h1>
+          <p>You do not have permission to view this page.</p>
+        </div>
+      </AdminLayout>
+    );
+  }
+
   return (
-    <MainLayout>
-      {/* Page header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Contractors</h1>
-        <Button>
-          <UserPlusIcon className="mr-2 h-4 w-4" />
-          Add Contractor
-        </Button>
-      </div>
+    <AdminLayout>
+      <div className="container mx-auto p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Contractors</h1>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Contractor
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Create New Contractor</DialogTitle>
+                <DialogDescription>
+                  Add a new contractor company to the platform
+                </DialogDescription>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ACME HVAC Services" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="slug"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Slug</FormLabel>
+                        <FormControl>
+                          <Input placeholder="acme-hvac" {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          URL-friendly identifier (e.g., acme-hvac). Only lowercase letters, numbers, and hyphens.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input placeholder="contact@example.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl>
+                            <Input placeholder="555-123-4567" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Address</FormLabel>
+                        <FormControl>
+                          <Input placeholder="123 Main St" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City</FormLabel>
+                          <FormControl>
+                            <Input placeholder="City" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State</FormLabel>
+                          <FormControl>
+                            <Input placeholder="State" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="zip"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>ZIP Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="12345" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="website"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Website</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" disabled={createContractorMutation.isPending}>
+                    {createContractorMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Create Contractor
+                  </Button>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        </div>
 
-      {/* Search and filters */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Search contractors..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Button variant="outline">Export</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Contractors list */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Contractors</CardTitle>
-          <CardDescription>
-            {filteredContractors.length} contractors found
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredContractors.map((contractor) => (
-                  <TableRow key={contractor.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 mr-2">
-                          <Building className="h-4 w-4" />
-                        </div>
-                        <div>
-                          {contractor.name}
-                          <div className="text-xs text-gray-500">/{contractor.slug}</div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">{contractor.email}</div>
-                      <div className="text-xs text-gray-500">{contractor.phone}</div>
-                    </TableCell>
-                    <TableCell>{contractor.city}, {contractor.state}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        {contractor.status === 'active' ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Inactive
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center text-sm">
-                        <CalendarIcon className="h-3 w-3 mr-1 text-gray-500" />
-                        {contractor.createdAt}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center text-sm">
-                        <CalendarIcon className="h-3 w-3 mr-1 text-gray-500" />
-                        {contractor.lastActive}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View Details</DropdownMenuItem>
-                          <DropdownMenuItem>Edit</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-red-600">
-                            Deactivate
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+        <Card>
+          <CardHeader>
+            <CardTitle>Contractors</CardTitle>
+            <CardDescription>
+              Manage contractor companies in your system
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : error ? (
+              <div className="text-center text-red-500 py-8">
+                Error loading contractors: {error.message}
+              </div>
+            ) : (
+              <Table>
+                <TableCaption>A list of all contractors in the system</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Company Name</TableHead>
+                    <TableHead>Slug</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Website</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </MainLayout>
+                </TableHeader>
+                <TableBody>
+                  {contractors.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center h-24">
+                        <Building2 className="mx-auto h-8 w-8 text-muted-foreground opacity-50 mb-2" />
+                        <p className="text-muted-foreground">No contractors found</p>
+                        <p className="text-xs text-muted-foreground">
+                          Add your first contractor using the button above
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    contractors.map((contractor) => (
+                      <TableRow key={contractor.id}>
+                        <TableCell>{contractor.id}</TableCell>
+                        <TableCell className="font-medium">{contractor.name}</TableCell>
+                        <TableCell>{contractor.slug}</TableCell>
+                        <TableCell>
+                          {contractor.email && (
+                            <div className="text-sm">{contractor.email}</div>
+                          )}
+                          {contractor.phone && (
+                            <div className="text-sm text-muted-foreground">
+                              {contractor.phone}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {contractor.city && contractor.state ? (
+                            `${contractor.city}, ${contractor.state}`
+                          ) : (
+                            contractor.city || contractor.state || "-"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {contractor.website ? (
+                            <a
+                              href={contractor.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:underline"
+                            >
+                              Visit Site
+                            </a>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </AdminLayout>
   );
 }
