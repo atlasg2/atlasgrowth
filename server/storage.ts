@@ -140,6 +140,7 @@ export class MemStorage implements IStorage {
     this.messageIdCounter = 1;
     this.activityIdCounter = 1;
     
+    const MemoryStore = createMemoryStore(session);
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
     });
@@ -546,15 +547,21 @@ export class DatabaseStorage implements IStorage {
     const admin = await this.getUserByUsername("admin");
     if (!admin) {
       // Create admin user with password that will be hashed in auth.ts
-      await this.createUser({
-        username: "admin",
-        password: "admin123", // Will be hashed in auth.ts
-        email: "admin@hvacpro.com",
-        firstName: "Admin",
-        lastName: "User",
-        role: "admin",
-        active: true,
-      });
+      try {
+        await this.createUser({
+          username: "admin",
+          password: "admin123", // Will be hashed in auth.ts
+          email: "admin@hvacpro.com",
+          firstName: "Admin",
+          lastName: "User",
+          role: "admin",
+          active: true,
+          contractorId: null,
+        });
+        console.log("Admin user created successfully");
+      } catch (error) {
+        console.error("Error creating admin user:", error);
+      }
     }
   }
 
