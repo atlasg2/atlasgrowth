@@ -10,9 +10,12 @@ import {
   activities, type Activity, type InsertActivity
 } from "@shared/schema";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
+import { db } from "./db";
+import { pool } from "./db";
+import { eq, and, desc, lte, gte } from "drizzle-orm";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   // Auth
@@ -524,4 +527,451 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
+
+  constructor() {
+    this.sessionStore = new PostgresSessionStore({ 
+      pool, 
+      createTableIfMissing: true 
+    });
+
+    // Initialize the admin user if it doesn't exist
+    this.initializeAdmin().catch(err => {
+      console.error("Failed to initialize admin user:", err);
+    });
+  }
+
+  private async initializeAdmin() {
+    const admin = await this.getUserByUsername("admin");
+    if (!admin) {
+      // Create admin user with password that will be hashed in auth.ts
+      await this.createUser({
+        username: "admin",
+        password: "admin123", // Will be hashed in auth.ts
+        email: "admin@hvacpro.com",
+        firstName: "Admin",
+        lastName: "User",
+        role: "admin",
+        active: true,
+      });
+    }
+  }
+
+  // Auth methods
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  // Contractor methods
+  async getContractor(id: number): Promise<Contractor | undefined> {
+    const [contractor] = await db.select().from(contractors).where(eq(contractors.id, id));
+    return contractor;
+  }
+
+  async getContractorBySlug(slug: string): Promise<Contractor | undefined> {
+    const [contractor] = await db.select().from(contractors).where(eq(contractors.slug, slug));
+    return contractor;
+  }
+
+  async getAllContractors(): Promise<Contractor[]> {
+    return await db.select().from(contractors);
+  }
+
+  async createContractor(contractor: InsertContractor): Promise<Contractor> {
+    const [newContractor] = await db.insert(contractors).values(contractor).returning();
+    return newContractor;
+  }
+
+  async updateContractor(id: number, data: Partial<InsertContractor>): Promise<Contractor | undefined> {
+    const [updatedContractor] = await db
+      .update(contractors)
+      .set(data)
+      .where(eq(contractors.id, id))
+      .returning();
+    return updatedContractor;
+  }
+
+  // Contact methods
+  async getContact(id: number): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
+    return contact;
+  }
+
+  async getContactsByContractor(contractorId: number): Promise<Contact[]> {
+    return await db
+      .select()
+      .from(contacts)
+      .where(eq(contacts.contractorId, contractorId));
+  }
+
+  async createContact(contact: InsertContact): Promise<Contact> {
+    const [newContact] = await db.insert(contacts).values(contact).returning();
+    return newContact;
+  }
+
+  async updateContact(id: number, data: Partial<InsertContact>): Promise<Contact | undefined> {
+    const [updatedContact] = await db
+      .update(contacts)
+      .set(data)
+      .where(eq(contacts.id, id))
+      .returning();
+    return updatedContact;
+  }
+
+  async deleteContact(id: number): Promise<boolean> {
+    await db.delete(contacts).where(eq(contacts.id, id));
+    return true;
+  }
+
+  // Job methods
+  async getJob(id: number): Promise<Job | undefined> {
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, id));
+    return job;
+  }
+
+  async getJobsByContractor(contractorId: number): Promise<Job[]> {
+    return await db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.contractorId, contractorId));
+  }
+
+  async getRecentJobsByContractor(contractorId: number, limit: number): Promise<Job[]> {
+    return await db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.contractorId, contractorId))
+      .orderBy(desc(jobs.createdAt))
+      .limit(limit);
+  }
+
+  async createJob(job: InsertJob): Promise<Job> {
+    const newJob = {
+      ...job,
+      createdAt: job.createdAt || new Date()
+    };
+    const [createdJob] = await db.insert(jobs).values(newJob).returning();
+    return createdJob;
+  }
+
+  async updateJob(id: number, data: Partial<InsertJob>): Promise<Job | undefined> {
+    const [updatedJob] = await db
+      .update(jobs)
+      .set(data)
+      .where(eq(jobs.id, id))
+      .returning();
+    return updatedJob;
+  }
+
+  async deleteJob(id: number): Promise<boolean> {
+    await db.delete(jobs).where(eq(jobs.id, id));
+    return true;
+  }
+
+  // Appointment methods
+  async getAppointment(id: number): Promise<Appointment | undefined> {
+    const [appointment] = await db.select().from(appointments).where(eq(appointments.id, id));
+    return appointment;
+  }
+
+  async getAppointmentsByContractor(contractorId: number): Promise<Appointment[]> {
+    return await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.contractorId, contractorId));
+  }
+
+  async getAppointmentsByDate(contractorId: number, date: Date): Promise<Appointment[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.contractorId, contractorId),
+          gte(appointments.startTime, startOfDay),
+          lte(appointments.startTime, endOfDay)
+        )
+      )
+      .orderBy(appointments.startTime);
+  }
+
+  async createAppointment(appointment: InsertAppointment): Promise<Appointment> {
+    const [newAppointment] = await db.insert(appointments).values(appointment).returning();
+    return newAppointment;
+  }
+
+  async updateAppointment(id: number, data: Partial<InsertAppointment>): Promise<Appointment | undefined> {
+    const [updatedAppointment] = await db
+      .update(appointments)
+      .set(data)
+      .where(eq(appointments.id, id))
+      .returning();
+    return updatedAppointment;
+  }
+
+  async deleteAppointment(id: number): Promise<boolean> {
+    await db.delete(appointments).where(eq(appointments.id, id));
+    return true;
+  }
+
+  // Invoice methods
+  async getInvoice(id: number): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return invoice;
+  }
+
+  async getInvoicesByContractor(contractorId: number): Promise<Invoice[]> {
+    return await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.contractorId, contractorId));
+  }
+
+  async getRecentInvoicesByContractor(contractorId: number, limit: number): Promise<Invoice[]> {
+    return await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.contractorId, contractorId))
+      .orderBy(desc(invoices.issueDate))
+      .limit(limit);
+  }
+
+  async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
+    const [newInvoice] = await db.insert(invoices).values(invoice).returning();
+    return newInvoice;
+  }
+
+  async updateInvoice(id: number, data: Partial<InsertInvoice>): Promise<Invoice | undefined> {
+    const [updatedInvoice] = await db
+      .update(invoices)
+      .set(data)
+      .where(eq(invoices.id, id))
+      .returning();
+    return updatedInvoice;
+  }
+
+  async deleteInvoice(id: number): Promise<boolean> {
+    await db.delete(invoices).where(eq(invoices.id, id));
+    return true;
+  }
+
+  // Review methods
+  async getReview(id: number): Promise<Review | undefined> {
+    const [review] = await db.select().from(reviews).where(eq(reviews.id, id));
+    return review;
+  }
+
+  async getReviewsByContractor(contractorId: number): Promise<Review[]> {
+    return await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.contractorId, contractorId));
+  }
+
+  async getRecentReviewsByContractor(contractorId: number, limit: number): Promise<Review[]> {
+    return await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.contractorId, contractorId))
+      .orderBy(desc(reviews.date))
+      .limit(limit);
+  }
+
+  async createReview(review: InsertReview): Promise<Review> {
+    const newReview = {
+      ...review,
+      date: review.date || new Date()
+    };
+    const [createdReview] = await db.insert(reviews).values(newReview).returning();
+    return createdReview;
+  }
+
+  async updateReview(id: number, data: Partial<InsertReview>): Promise<Review | undefined> {
+    const [updatedReview] = await db
+      .update(reviews)
+      .set(data)
+      .where(eq(reviews.id, id))
+      .returning();
+    return updatedReview;
+  }
+
+  async deleteReview(id: number): Promise<boolean> {
+    await db.delete(reviews).where(eq(reviews.id, id));
+    return true;
+  }
+
+  // Message methods
+  async getMessage(id: number): Promise<Message | undefined> {
+    const [message] = await db.select().from(messages).where(eq(messages.id, id));
+    return message;
+  }
+
+  async getMessagesByContractor(contractorId: number): Promise<Message[]> {
+    return await db
+      .select()
+      .from(messages)
+      .where(eq(messages.contractorId, contractorId))
+      .orderBy(desc(messages.timestamp));
+  }
+
+  async getUnreadMessageCount(contractorId: number): Promise<number> {
+    const result = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.contractorId, contractorId),
+          eq(messages.isRead, false)
+        )
+      );
+    return result.length;
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const newMessage = {
+      ...message,
+      timestamp: message.timestamp || new Date()
+    };
+    const [createdMessage] = await db.insert(messages).values(newMessage).returning();
+    return createdMessage;
+  }
+
+  async updateMessage(id: number, data: Partial<InsertMessage>): Promise<Message | undefined> {
+    const [updatedMessage] = await db
+      .update(messages)
+      .set(data)
+      .where(eq(messages.id, id))
+      .returning();
+    return updatedMessage;
+  }
+
+  // Activity methods
+  async getActivity(id: number): Promise<Activity | undefined> {
+    const [activity] = await db.select().from(activities).where(eq(activities.id, id));
+    return activity;
+  }
+
+  async getActivitiesByContractor(contractorId: number): Promise<Activity[]> {
+    return await db
+      .select()
+      .from(activities)
+      .where(eq(activities.contractorId, contractorId))
+      .orderBy(desc(activities.timestamp));
+  }
+
+  async getRecentActivitiesByContractor(contractorId: number, limit: number): Promise<Activity[]> {
+    return await db
+      .select()
+      .from(activities)
+      .where(eq(activities.contractorId, contractorId))
+      .orderBy(desc(activities.timestamp))
+      .limit(limit);
+  }
+
+  async createActivity(activity: InsertActivity): Promise<Activity> {
+    const newActivity = {
+      ...activity,
+      timestamp: activity.timestamp || new Date()
+    };
+    const [createdActivity] = await db.insert(activities).values(newActivity).returning();
+    return createdActivity;
+  }
+  
+  // Stats
+  async getContractorStats(contractorId: number): Promise<{
+    activeJobs: number;
+    scheduledToday: number;
+    pendingInvoicesAmount: number;
+    pendingInvoicesCount: number;
+    averageRating: number;
+    reviewCount: number;
+  }> {
+    // Active jobs count
+    const activeJobsResult = await db
+      .select()
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.contractorId, contractorId),
+          eq(jobs.status, "in_progress")
+        )
+      );
+    const activeJobs = activeJobsResult.length;
+    
+    // Scheduled appointments today
+    const today = new Date();
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    const scheduledAppointmentsResult = await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.contractorId, contractorId),
+          gte(appointments.startTime, startOfDay),
+          lte(appointments.startTime, endOfDay)
+        )
+      );
+    const scheduledToday = scheduledAppointmentsResult.length;
+    
+    // Pending invoices
+    const pendingInvoicesResult = await db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.contractorId, contractorId),
+          eq(invoices.status, "sent")
+        )
+      );
+    
+    const pendingInvoicesCount = pendingInvoicesResult.length;
+    const pendingInvoicesAmount = pendingInvoicesResult.reduce((sum, invoice) => {
+      const amount = typeof invoice.amount === 'string' ? parseFloat(invoice.amount) : invoice.amount;
+      return sum + Number(amount);
+    }, 0);
+    
+    // Reviews
+    const reviewsResult = await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.contractorId, contractorId));
+    
+    const reviewCount = reviewsResult.length;
+    const totalRating = reviewsResult.reduce((sum, review) => sum + review.rating, 0);
+    const averageRating = reviewCount > 0 ? totalRating / reviewCount : 0;
+    
+    return {
+      activeJobs,
+      scheduledToday,
+      pendingInvoicesAmount,
+      pendingInvoicesCount,
+      averageRating,
+      reviewCount
+    };
+  }
+}
+
+export const storage = new DatabaseStorage();
