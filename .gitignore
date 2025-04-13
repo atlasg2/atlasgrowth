@@ -1,5 +1,10 @@
 node_modules
+.env
 dist
+.env.local
+.replit
+.config
+cookies.txt
 .DS_Store
 server/public
 vite.config.ts.*
