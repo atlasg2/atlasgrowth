@@ -56,6 +56,23 @@ commit_message=${commit_message:-"Update from Replit $(date +'%Y-%m-%d %H:%M:%S'
 
 # Commit and push
 git commit -m "$commit_message"
-git push -u origin $DEFAULT_BRANCH || git push --set-upstream origin $DEFAULT_BRANCH
+
+# Try to pull first to integrate remote changes
+echo "Attempting to integrate remote changes..."
+git pull --rebase origin $DEFAULT_BRANCH || {
+  echo "Pull failed, trying to force push (use this carefully)..."
+  read -p "Do you want to force push? This will overwrite remote changes (y/n): " force_push
+  if [[ $force_push == "y" ]]; then
+    git push -f -u origin $DEFAULT_BRANCH
+  else
+    echo "Push aborted. You may want to:"
+    echo "1. Pull changes manually: git pull origin $DEFAULT_BRANCH"
+    echo "2. Resolve any conflicts"
+    echo "3. Run this script again"
+    exit 1
+  fi
+} || {
+  git push -u origin $DEFAULT_BRANCH || git push --set-upstream origin $DEFAULT_BRANCH
+}
 
 echo "Successfully pushed to GitHub!"
