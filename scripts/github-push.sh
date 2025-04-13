@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # GitHub automation script
@@ -13,6 +14,7 @@ REPO_NAME="atlasgrowth"
 # Check if secrets are available
 if [ -z "$GITHUB_USERNAME" ] || [ -z "$GITHUB_TOKEN" ]; then
   echo "Error: GITHUB_USERNAME or GITHUB_TOKEN not set"
+  echo "Please set these in the Secrets tab (Environment Variables)"
   exit 1
 fi
 
@@ -32,10 +34,28 @@ if [ ! -d .git ]; then
   git init
   git config user.name "$GITHUB_USERNAME"
   git config user.email "$GITHUB_USERNAME@users.noreply.github.com"
-  git remote add origin https://github.com/$GITHUB_USERNAME/$REPO_NAME.git
+  git remote add origin https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_USERNAME/$REPO_NAME.git
 else
   echo "Git repository already initialized"
   if ! git remote | grep -q "origin"; then
     echo "Adding GitHub remote..."
-    git remote add origin https://github.com/$GITHUB_USERNAME/$REPO_NAME.git
+    git remote add origin https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_USERNAME/$REPO_NAME.git
   else
+    echo "Updating GitHub remote..."
+    git remote set-url origin https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_USERNAME/$REPO_NAME.git
+  fi
+fi
+
+# Add all changes
+git add .
+
+# Commit changes
+echo "Enter a commit message (or press Enter for default message):"
+read commit_message
+commit_message=${commit_message:-"Update from Replit $(date +'%Y-%m-%d %H:%M:%S')"}
+
+# Commit and push
+git commit -m "$commit_message"
+git push -u origin $DEFAULT_BRANCH || git push --set-upstream origin $DEFAULT_BRANCH
+
+echo "Successfully pushed to GitHub!"
