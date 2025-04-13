@@ -696,6 +696,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const stats = await storage.getContractorStats(req.user.contractorId);
     res.json(stats);
   });
+  
+  // Simple DB test endpoint
+  app.get("/api/db-test", async (req, res) => {
+    try {
+      // Just try to count users - a simple query to test the connection
+      const count = await storage.getUserCount();
+      res.json({ success: true, message: "Database connection working!", count, timestamp: new Date() });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

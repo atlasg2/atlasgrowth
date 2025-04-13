@@ -95,6 +95,9 @@ export interface IStorage {
     reviewCount: number;
   }>;
 
+  // Database test
+  testDbConnection(): Promise<{ success: boolean, timestamp: Date }>;
+
   // Session store
   sessionStore: session.Store;
 }
@@ -121,6 +124,10 @@ export class MemStorage implements IStorage {
   private reviewIdCounter: number;
   private messageIdCounter: number;
   private activityIdCounter: number;
+  
+  async testDbConnection(): Promise<{ success: boolean, timestamp: Date }> {
+    return { success: true, timestamp: new Date() };
+  }
 
   constructor() {
     this.users = new Map();

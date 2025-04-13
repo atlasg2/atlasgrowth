@@ -40,6 +40,12 @@ export const contractors = pgTable("contractors", {
   active: boolean("active").default(true),
   description: text("description"),
   createdById: integer("created_by_id").references(() => users.id),
+  // New fields for prospect management
+  status: text("status").default("prospect"), // prospect, contacted, qualified, demo, client
+  lastContactedDate: timestamp("last_contacted_date"),
+  leadSource: text("lead_source"),
+  notes: text("notes"),
+  photosCount: text("photos_count"), // Number of photos from Google listing
 });
 
 // Users table
@@ -182,6 +188,39 @@ export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+// Google Reviews table
+export const googleReviews = pgTable("google_reviews", {
+  id: serial("id").primaryKey(),
+  contractorId: integer("contractor_id").references(() => contractors.id),
+  placeId: text("place_id").notNull(), // Google Place ID to link to the contractor
+  
+  // Review author info
+  authorName: text("author_name"),
+  
+  // Review content
+  stars: integer("stars"), // The star rating (1-5)
+  totalScore: numeric("total_score"), // Numeric score
+  text: text("review_text"), // The actual review text
+  publishedAtDate: timestamp("published_at_date"), // When the review was published
+  
+  // Owner's response
+  responseFromOwnerText: text("response_from_owner_text"), // Text of the owner's response
+  responseFromOwnerDate: timestamp("response_from_owner_date"), // When the owner responded
+  
+  // Location data
+  latitude: text("latitude"),
+  longitude: text("longitude"),
+  
+  // Original review data storage
+  rawData: jsonb("raw_data"), // Store the complete raw data for future reference
+  
+  // Metadata
+  importedAt: timestamp("imported_at").defaultNow(), // When this review was imported
+});
+
+export const insertGoogleReviewSchema = createInsertSchema(googleReviews).omit({ id: true });
+export type InsertGoogleReview = z.infer<typeof insertGoogleReviewSchema>;
+
 export type InsertActivity = z.infer<typeof insertActivitySchema>;
 
 export type Contractor = typeof contractors.$inferSelect;
@@ -193,6 +232,7 @@ export type Invoice = typeof invoices.$inferSelect;
 export type Review = typeof reviews.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
+export type GoogleReview = typeof googleReviews.$inferSelect;
 
 // Login schema
 export const loginSchema = z.object({

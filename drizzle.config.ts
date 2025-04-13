@@ -11,4 +11,6 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // Specify tables to exclude from being dropped
+  tablesFilter: ["!session", "!test_table", "!test_table_id_seq"],
 });
