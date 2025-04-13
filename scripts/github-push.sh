@@ -52,27 +52,55 @@ git add .
 # Commit changes
 echo "Enter a commit message (or press Enter for default message):"
 read commit_message
-commit_message=${commit_message:-"Update from Replit $(date +'%Y-%m-%d %H:%M:%S')"}
+commit_message=${commit_message:-"Initial commit from Replit $(date +'%Y-%m-%d %H:%M:%S')"}
 
-# Commit and push
+# Commit changes
 git commit -m "$commit_message"
 
-# Try to pull first to integrate remote changes
-echo "Attempting to integrate remote changes..."
-git pull --rebase origin $DEFAULT_BRANCH || {
-  echo "Pull failed, trying to force push (use this carefully)..."
-  read -p "Do you want to force push? This will overwrite remote changes (y/n): " force_push
-  if [[ $force_push == "y" ]]; then
-    git push -f -u origin $DEFAULT_BRANCH
+# For first-time push, let's try to fetch and then force push with lease
+echo "Checking remote status..."
+
+# Try to fetch first
+if git fetch origin $DEFAULT_BRANCH; then
+  echo "Remote branch exists. Will need to integrate changes."
+  
+  # Check if there are remote changes
+  if git branch -r | grep -q "origin/$DEFAULT_BRANCH"; then
+    echo "The remote repository already has content."
+    echo "Options:"
+    echo "1. Force push your changes (replaces remote content)"
+    echo "2. Pull and merge remote changes"
+    echo "3. Cancel and exit"
+    read -p "Choose option (1-3): " option
+    
+    case $option in
+      1)
+        echo "Force pushing your changes..."
+        git push -f origin $DEFAULT_BRANCH
+        ;;
+      2)
+        echo "Pulling and merging remote changes..."
+        git pull --allow-unrelated-histories origin $DEFAULT_BRANCH
+        git push origin $DEFAULT_BRANCH
+        ;;
+      3)
+        echo "Operation cancelled."
+        exit 0
+        ;;
+      *)
+        echo "Invalid option. Exiting."
+        exit 1
+        ;;
+    esac
   else
-    echo "Push aborted. You may want to:"
-    echo "1. Pull changes manually: git pull origin $DEFAULT_BRANCH"
-    echo "2. Resolve any conflicts"
-    echo "3. Run this script again"
-    exit 1
+    # Empty remote repository (just created)
+    echo "Pushing to new remote repository..."
+    git push -u origin $DEFAULT_BRANCH
   fi
-} || {
-  git push -u origin $DEFAULT_BRANCH || git push --set-upstream origin $DEFAULT_BRANCH
-}
+else
+  # Remote branch doesn't exist yet
+  echo "Setting up new remote branch..."
+  git push -u origin $DEFAULT_BRANCH
+fi
 
 echo "Successfully pushed to GitHub!"
