@@ -777,11 +777,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Contractor not found" });
       }
       
+      // Check if the contractor is a prospect based on the status field
+      const isProspect = contractor.status === "prospect";
+      
+      // Check if a user account already exists for this contractor
+      const existingUser = await storage.getUserByUsername(slug);
+      
+      // If no user account exists and this is a prospect, create a temporary user account
+      if (!existingUser && isProspect) {
+        try {
+          // Hash the password (using the slug as both username and password)
+          const hashedPassword = await hashPassword(slug);
+          
+          // Create a temporary user
+          await storage.createUser({
+            username: slug,
+            password: hashedPassword,
+            email: contractor.email || `${slug}@example.com`,
+            firstName: contractor.name.split(' ')[0] || '',
+            lastName: contractor.name.split(' ').slice(1).join(' ') || '',
+            role: "contractor",
+            active: true,
+            contractorId: contractor.id,
+          });
+          
+          console.log(`Created temporary user account for prospect: ${slug}`);
+        } catch (error) {
+          console.error("Error creating temporary user account:", error);
+          // Continue anyway - we don't want to block the response
+        }
+      }
+      
       // Only return public information and a boolean indicating if this is a prospect
       return res.json({
         name: contractor.name,
         slug: contractor.slug,
-        isProspect: contractor.status === 'prospect',
+        isProspect: isProspect
       });
     } catch (error) {
       console.error("Error fetching contractor by slug:", error);
