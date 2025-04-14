@@ -34,7 +34,7 @@ export default function Header() {
       : user.username.slice(0, 2).toUpperCase()
     : "";
     
-  const companyName = contractor?.name || "HVAC Pro";
+  const companyName = contractor?.name || "Atlas Growth";
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
@@ -43,9 +43,9 @@ export default function Header() {
         <div className="flex items-center">
           <div className="flex-shrink-0 flex items-center">
             <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white mr-2">
-              <span className="material-icons text-xl">ac_unit</span>
+              <span className="material-icons text-xl">trending_up</span>
             </div>
-            <span className="text-xl font-semibold">HVAC Pro</span>
+            <span className="text-xl font-semibold">Atlas Growth</span>
           </div>
         </div>
         

@@ -89,7 +89,7 @@ export default function AuthPage() {
         const data = await response.json();
         
         if (data.isProspect) {
-          // If it's a prospect, set up auto-login
+          // If it's a prospect, set up pre-filled login (NOT auto-login)
           setIsProspectLogin(true);
           setProspectName(data.name);
           
@@ -130,9 +130,9 @@ export default function AuthPage() {
           <CardHeader className="space-y-1">
             <div className="flex items-center mb-4">
               <div className="w-10 h-10 rounded bg-primary flex items-center justify-center text-white mr-2">
-                <span className="material-icons text-2xl">ac_unit</span>
+                <span className="material-icons text-2xl">trending_up</span>
               </div>
-              <h2 className="text-2xl font-bold">HVAC Pro</h2>
+              <h2 className="text-2xl font-bold">Atlas Growth</h2>
             </div>
             {isProspectLogin ? (
               <>
@@ -350,7 +350,7 @@ export default function AuthPage() {
       {/* Hero section */}
       <div className="w-full md:w-1/2 bg-primary p-8 flex items-center justify-center">
         <div className="max-w-lg text-white">
-          <h1 className="text-4xl font-bold mb-4">HVAC Pro</h1>
+          <h1 className="text-4xl font-bold mb-4">Atlas Growth</h1>
           <p className="text-xl mb-6">The all-in-one SaaS platform for HVAC contractors</p>
           <ul className="space-y-3">
             <li className="flex items-start">
