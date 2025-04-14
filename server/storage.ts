@@ -15,6 +15,10 @@ import { db } from "./db";
 import { pool } from "./db";
 import { eq, and, desc, lte, gte, count } from "drizzle-orm";
 import createMemoryStore from "memorystore";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
+
+const scryptAsync = promisify(scrypt);
 
 const PostgresSessionStore = connectPg(session);
 
