@@ -138,7 +138,7 @@ export const reviews = pgTable("reviews", {
   contactId: integer("contact_id").references(() => contacts.id).notNull(),
   rating: integer("rating").notNull(),
   comment: text("comment"),
-  serviceType: text("service_type"),
+  serviceType: text("service_type"), // Type of service reviewed
   date: timestamp("date").defaultNow(),
   verified: boolean("verified").default(false),
   response: text("response"),
