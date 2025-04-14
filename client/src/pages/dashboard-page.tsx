@@ -13,44 +13,68 @@ import { Appointment, Job, Invoice, Review, Activity } from "@shared/schema";
 import { DownloadIcon, PlusIcon, ChevronRightIcon, Combine, CalendarIcon, ReceiptCent, StarIcon } from "lucide-react";
 import { Link } from "wouter";
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  previewMode?: boolean;
+  previewData?: any;
+}
+
+export default function DashboardPage({ previewMode = false, previewData = null }: DashboardPageProps) {
   const { user } = useAuth();
+  
+  // Use either preview data or fetch from API based on mode
+  const contractorId = previewMode && previewData ? previewData.id : user?.contractorId;
   
   // Fetch stats for the contractor
   const { data: stats } = useQuery({
     queryKey: ["/api/stats"],
-    enabled: !!user?.contractorId,
+    enabled: !previewMode && !!contractorId,
   });
   
   // Fetch today's appointments
   const { data: appointments } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments/today"],
-    enabled: !!user?.contractorId,
+    enabled: !previewMode && !!contractorId,
   });
   
   // Fetch recent jobs
   const { data: jobs } = useQuery<Job[]>({
     queryKey: ["/api/jobs/recent"],
-    enabled: !!user?.contractorId,
+    enabled: !previewMode && !!contractorId,
   });
   
   // Fetch recent invoices
   const { data: invoices } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices/recent"],
-    enabled: !!user?.contractorId,
+    enabled: !previewMode && !!contractorId,
   });
   
   // Fetch recent reviews
   const { data: reviews } = useQuery<Review[]>({
     queryKey: ["/api/reviews/recent"],
-    enabled: !!user?.contractorId,
+    enabled: !previewMode && !!contractorId,
   });
   
   // Fetch recent activities
   const { data: activities } = useQuery<Activity[]>({
     queryKey: ["/api/activities/recent"],
-    enabled: !!user?.contractorId,
+    enabled: !previewMode && !!contractorId,
   });
+  
+  // In preview mode, we use the preview data instead of the fetched data
+  const displayStats = previewMode ? {
+    activeJobs: 0,
+    scheduledToday: 0,
+    pendingInvoicesAmount: 0,
+    pendingInvoicesCount: 0,
+    averageRating: previewData?.rating ? parseFloat(previewData.rating) : 0,
+    reviewCount: previewData?.reviewCount ? parseInt(previewData.reviewCount) : 0
+  } : stats;
+  
+  const displayAppointments = previewMode ? [] : appointments;
+  const displayJobs = previewMode ? [] : jobs;
+  const displayInvoices = previewMode ? [] : invoices;
+  const displayReviews = previewMode ? [] : reviews;
+  const displayActivities = previewMode ? [] : activities;
 
   return (
     <MainLayout>
@@ -76,7 +100,7 @@ export default function DashboardPage() {
         {/* Active Jobs Card */}
         <StatsCard 
           title="Active Jobs"
-          value={stats?.activeJobs || 0}
+          value={displayStats?.activeJobs || 0}
           icon={<span className="material-icons text-primary">build</span>}
           iconBgColor="bg-blue-100"
           trend={{
@@ -88,7 +112,7 @@ export default function DashboardPage() {
         {/* Scheduled Visits Card */}
         <StatsCard 
           title="Scheduled Today"
-          value={stats?.scheduledToday || 0}
+          value={displayStats?.scheduledToday || 0}
           icon={<span className="material-icons text-secondary">event</span>}
           iconBgColor="bg-green-100"
           footer={appointments && `${appointments.filter(a => a.status === 'pending').length} pending, ${appointments.filter(a => a.status === 'confirmed').length} confirmed`}

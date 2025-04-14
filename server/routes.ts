@@ -6,8 +6,8 @@ import { format } from "date-fns";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
 import { db } from "./db";
-import { eq, and, gte, lte } from "drizzle-orm";
-import { googleReviews } from "@shared/schema";
+import { eq, and, gte, lte, like, desc, asc, or, count } from "drizzle-orm";
+import { googleReviews, contractors } from "@shared/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -200,6 +200,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     if (req.user.role !== "admin") return res.sendStatus(403);
     
+    // If slug parameter is provided, get a specific contractor by slug
+    if (req.query.slug) {
+      const slug = req.query.slug as string;
+      const contractor = await storage.getContractorBySlug(slug);
+      
+      if (!contractor) {
+        return res.status(404).json({ message: "Contractor not found" });
+      }
+      
+      return res.json([contractor]);
+    }
+    
+    // Otherwise, get all contractors
     const contractors = await storage.getAllContractors();
     res.json(contractors);
   });
@@ -900,6 +913,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, message: "Database connection working!", count, timestamp: new Date() });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+  
+  // Atlas sales pipeline endpoints
+  app.get("/api/atlas/contractors", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+    
+    try {
+      // Extract query parameters for filtering
+      const status = req.query.status as string;
+      const search = req.query.search as string;
+      const sortBy = req.query.sortBy as string || "name";
+      const sortDir = req.query.sortDir as string || "asc";
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = (page - 1) * limit;
+      
+      // Build the query
+      let query = db.select().from(contractors);
+      
+      // Apply filters
+      if (status) {
+        query = query.where(eq(contractors.status, status));
+      }
+      
+      if (search) {
+        query = query.where(
+          or(
+            like(contractors.name, `%${search}%`),
+            like(contractors.email, `%${search}%`),
+            like(contractors.phone, `%${search}%`),
+            like(contractors.city, `%${search}%`),
+            like(contractors.state, `%${search}%`)
+          )
+        );
+      }
+      
+      // Apply sorting
+      if (sortDir === "desc") {
+        query = query.orderBy(desc(contractors[sortBy as keyof typeof contractors]));
+      } else {
+        query = query.orderBy(asc(contractors[sortBy as keyof typeof contractors]));
+      }
+      
+      // Get total count for pagination
+      const totalCount = await db.select({ count: count() }).from(contractors);
+      
+      // Apply pagination
+      query = query.limit(limit).offset(offset);
+      
+      // Execute query
+      const results = await query;
+      
+      res.json({
+        contractors: results,
+        pagination: {
+          total: Number(totalCount[0].count),
+          page,
+          limit,
+          pages: Math.ceil(Number(totalCount[0].count) / limit)
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching contractors for Atlas:", error);
+      res.status(500).json({ message: "Error fetching contractors" });
+    }
+  });
+  
+  // Update contractor status in the pipeline
+  app.patch("/api/atlas/contractors/:id/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+    
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid contractor ID" });
+    
+    const { status, notes, lastContactedDate } = req.body;
+    
+    try {
+      // Update the contractor
+      const contractor = await storage.updateContractor(id, { 
+        status, 
+        notes, 
+        lastContactedDate: lastContactedDate ? new Date(lastContactedDate) : new Date()
+      });
+      
+      if (!contractor) {
+        return res.status(404).json({ message: "Contractor not found" });
+      }
+      
+      // Create activity record for the status change
+      await storage.createActivity({
+        contractorId: id,
+        userId: req.user.id,
+        type: "status_change",
+        description: `Status changed to ${status}`,
+        entityType: "contractor",
+        entityId: id
+      });
+      
+      res.json(contractor);
+    } catch (error) {
+      console.error("Error updating contractor status:", error);
+      res.status(500).json({ message: "Error updating contractor status" });
+    }
+  });
+
+  // Get pipeline summary (counts by status)
+  app.get("/api/atlas/pipeline-summary", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+    
+    try {
+      const statuses = ["prospect", "contacted", "qualified", "demo", "client"];
+      const summary = {};
+      
+      // Get counts for each status
+      for (const status of statuses) {
+        const result = await db
+          .select({ count: count() })
+          .from(contractors)
+          .where(eq(contractors.status, status));
+        
+        summary[status] = Number(result[0]?.count || 0);
+      }
+      
+      // Get total count
+      const total = await db
+        .select({ count: count() })
+        .from(contractors);
+      
+      summary["total"] = Number(total[0]?.count || 0);
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching pipeline summary:", error);
+      res.status(500).json({ message: "Error fetching pipeline summary" });
+    }
+  });
+  
+  // Get recent activities for the pipeline
+  app.get("/api/atlas/activities", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+    
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      // Get the most recent pipeline-related activities
+      const activities = await db
+        .select({
+          id: activities.id,
+          contractorId: activities.contractorId,
+          userId: activities.userId,
+          type: activities.type,
+          description: activities.description,
+          timestamp: activities.timestamp,
+          contractorName: contractors.name
+        })
+        .from(activities)
+        .leftJoin(contractors, eq(activities.contractorId, contractors.id))
+        .where(eq(activities.type, "status_change"))
+        .orderBy(desc(activities.timestamp))
+        .limit(limit);
+      
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching pipeline activities:", error);
+      res.status(500).json({ message: "Error fetching pipeline activities" });
     }
   });
   

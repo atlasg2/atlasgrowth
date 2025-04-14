@@ -1,4 +1,4 @@
-# Claude Environment Setup
+So when I view the... it did better taking me to the dash atlas page on default, but still where it says software access and I click login URL, it does the same thing by just redirecting me to the atlas page where I originally go when I log in. Yeah, so now I'm open to suggestions on this. What do you think we should do?# Claude Environment Setup
 
 ## Database Setup
 

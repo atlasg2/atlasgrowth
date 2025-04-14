@@ -20,6 +20,8 @@ import SettingsPage from "@/pages/settings-page";
 import AdminDashboardPage from "@/pages/admin/dashboard";
 import AdminContractorsPage from "@/pages/admin/contractors";
 import AdminUsersPage from "@/pages/admin/users";
+import AtlasPage from "@/pages/atlas";
+import ContractorPreviewPage from "@/pages/contractor-preview";
 
 function Router() {
   return (
@@ -37,8 +39,10 @@ function Router() {
       <ProtectedRoute path="/admin/dashboard" component={AdminDashboardPage} />
       <ProtectedRoute path="/admin/contractors" component={AdminContractorsPage} />
       <ProtectedRoute path="/admin/users" component={AdminUsersPage} />
+      <ProtectedRoute path="/atlas" component={AtlasPage} />
       <Route path="/auth" component={AuthPage} />
       {/* Special route for contractor slugs - this will auto-populate login credentials */}
+      <ProtectedRoute path="/view-as/:slug" component={ContractorPreviewPage} />
       <Route path="/:slug" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
