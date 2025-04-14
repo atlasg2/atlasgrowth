@@ -78,6 +78,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Create a user account for a prospect contractor automatically
+  app.post("/api/admin/prospect-account", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (req.user.role !== "admin") return res.sendStatus(403);
+    
+    const { contractorId } = req.body;
+    
+    if (!contractorId) {
+      return res.status(400).json({ message: "Contractor ID is required" });
+    }
+    
+    try {
+      // Get the contractor details
+      const contractor = await storage.getContractor(contractorId);
+      if (!contractor) {
+        return res.status(404).json({ message: "Contractor not found" });
+      }
+      
+      // Use the slug as both username and password
+      const username = contractor.slug;
+      const password = contractor.slug;
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ message: "User with this username already exists" });
+      }
+      
+      // Hash password
+      const hashedPassword = await hashPassword(password);
+      
+      // Create user with contractor role
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword,
+        email: contractor.email,
+        firstName: null,
+        lastName: null,
+        role: "contractor",
+        active: true,
+        contractorId,
+      });
+      
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+      
+      res.status(201).json({
+        user: userWithoutPassword,
+        autoLoginUrl: `${req.headers.origin || ''}/${contractor.slug}`
+      });
+    } catch (error) {
+      console.error("Error creating prospect account:", error);
+      res.status(500).json({ message: "Error creating prospect account" });
+    }
+  });
+  
   // Contractors
   app.get("/api/contractors", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -705,6 +761,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, message: "Database connection working!", count, timestamp: new Date() });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+  
+  // Endpoint to get contractor by slug for auto-login
+  app.get("/api/contractor-by-slug/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      if (!slug) {
+        return res.status(400).json({ message: "Slug is required" });
+      }
+      
+      const contractor = await storage.getContractorBySlug(slug);
+      if (!contractor) {
+        return res.status(404).json({ message: "Contractor not found" });
+      }
+      
+      // Only return public information and a boolean indicating if this is a prospect
+      return res.json({
+        name: contractor.name,
+        slug: contractor.slug,
+        isProspect: contractor.status === 'prospect',
+      });
+    } catch (error) {
+      console.error("Error fetching contractor by slug:", error);
+      return res.status(500).json({ message: "Internal server error" });
     }
   });
 

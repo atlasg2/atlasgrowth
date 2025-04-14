@@ -3,8 +3,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertUserSchema, InsertUser, loginSchema, LoginData } from "@shared/schema";
 import { z } from "zod";
 import { useAuth } from "@/hooks/use-auth";
-import { Redirect } from "wouter";
-import { useState } from "react";
+import { Redirect, useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { apiRequest } from "../lib/queryClient";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,13 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("login");
+  const [location] = useLocation();
+  const [isProspectLogin, setIsProspectLogin] = useState(false);
+  const [prospectName, setProspectName] = useState("");
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+
+  // Get slug from URL (it's the part after the domain, e.g., yourdomain.com/their-slug)
+  const slug = location.substring(1); // Remove the leading slash
 
   const loginForm = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
@@ -64,6 +72,40 @@ export default function AuthPage() {
       role: "contractor",
     },
   });
+  
+  // Check if the current URL contains a slug that matches a contractor
+  useEffect(() => {
+    async function checkSlug() {
+      // Only proceed if there's a slug in the URL
+      if (!slug || slug === 'auth') {
+        return;
+      }
+      
+      setIsCheckingSlug(true);
+      
+      try {
+        // Call the API to check if the slug exists and is a prospect
+        const response = await apiRequest("GET", `/api/contractor-by-slug/${slug}`);
+        const data = await response.json();
+        
+        if (data.isProspect) {
+          // If it's a prospect, set up auto-login
+          setIsProspectLogin(true);
+          setProspectName(data.name);
+          
+          // Populate the form with the slug as both username and password
+          loginForm.setValue("username", slug);
+          loginForm.setValue("password", slug);
+        }
+      } catch (error) {
+        console.error("Error checking slug:", error);
+      } finally {
+        setIsCheckingSlug(false);
+      }
+    }
+    
+    checkSlug();
+  }, [slug, loginForm]);
 
   function onLoginSubmit(data: LoginData) {
     loginMutation.mutate(data);
@@ -92,62 +134,100 @@ export default function AuthPage() {
               </div>
               <h2 className="text-2xl font-bold">HVAC Pro</h2>
             </div>
-            <CardTitle className="text-2xl">Welcome</CardTitle>
-            <CardDescription>
-              Sign in to your account or create a new one
-            </CardDescription>
+            {isProspectLogin ? (
+              <>
+                <CardTitle className="text-2xl">Welcome {prospectName}!</CardTitle>
+                <CardDescription>
+                  Your account is ready to explore. Just click the button below to log in.
+                </CardDescription>
+              </>
+            ) : (
+              <>
+                <CardTitle className="text-2xl">Welcome</CardTitle>
+                <CardDescription>
+                  Sign in to your account or create a new one
+                </CardDescription>
+              </>
+            )}
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="login">Sign In</TabsTrigger>
-                <TabsTrigger value="register">Register</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="login">
-                <Form {...loginForm}>
-                  <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
-                    <FormField
-                      control={loginForm.control}
-                      name="username"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Username</FormLabel>
-                          <FormControl>
-                            <Input placeholder="username" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={loginForm.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <Input type="password" placeholder="********" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button 
-                      type="submit" 
-                      className="w-full" 
-                      disabled={loginMutation.isPending}
-                    >
-                      {loginMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Signing in...
-                        </>
-                      ) : "Sign In"}
-                    </Button>
-                  </form>
-                </Form>
-              </TabsContent>
+            {isCheckingSlug ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : isProspectLogin ? (
+              <Form {...loginForm}>
+                <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4 text-sm">
+                    This is your first time logging in. Your username and password have been pre-filled.
+                    You can change your password after logging in.
+                  </div>
+                  <Button 
+                    type="submit" 
+                    className="w-full" 
+                    size="lg"
+                    disabled={loginMutation.isPending}
+                  >
+                    {loginMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : "Access Your Dashboard"}
+                  </Button>
+                </form>
+              </Form>
+            ) : (
+              <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="login">Sign In</TabsTrigger>
+                  <TabsTrigger value="register">Register</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="login">
+                  <Form {...loginForm}>
+                    <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
+                      <FormField
+                        control={loginForm.control}
+                        name="username"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Username</FormLabel>
+                            <FormControl>
+                              <Input placeholder="username" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={loginForm.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Password</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="********" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button 
+                        type="submit" 
+                        className="w-full" 
+                        disabled={loginMutation.isPending}
+                      >
+                        {loginMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Signing in...
+                          </>
+                        ) : "Sign In"}
+                      </Button>
+                    </form>
+                  </Form>
+                </TabsContent>
               
               <TabsContent value="register">
                 <Form {...registerForm}>

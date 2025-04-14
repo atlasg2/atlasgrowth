@@ -38,6 +38,8 @@ function Router() {
       <ProtectedRoute path="/admin/contractors" component={AdminContractorsPage} />
       <ProtectedRoute path="/admin/users" component={AdminUsersPage} />
       <Route path="/auth" component={AuthPage} />
+      {/* Special route for contractor slugs - this will auto-populate login credentials */}
+      <Route path="/:slug" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
   );
