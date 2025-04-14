@@ -1027,15 +1027,34 @@ export class DatabaseStorage implements IStorage {
       return sum + Number(amount);
     }, 0);
     
-    // Reviews
-    const reviewsResult = await db
+    // Google reviews - Use these as the primary source for ratings data
+    const googleReviewsResult = await db
+      .select()
+      .from(googleReviews)
+      .where(eq(googleReviews.contractorId, contractorId));
+    
+    // Internal reviews - Use as fallback if no Google reviews exist
+    const internalReviewsResult = await db
       .select()
       .from(reviews)
       .where(eq(reviews.contractorId, contractorId));
     
-    const reviewCount = reviewsResult.length;
-    const totalRating = reviewsResult.reduce((sum, review) => sum + review.rating, 0);
-    const averageRating = reviewCount > 0 ? totalRating / reviewCount : 0;
+    // Prioritize Google reviews but fall back to internal reviews if none exist
+    let reviewCount = googleReviewsResult.length;
+    let averageRating = 0;
+    
+    if (reviewCount > 0) {
+      // Calculate average from Google reviews
+      const totalRating = googleReviewsResult.reduce((sum, review) => {
+        return sum + (review.stars || 0);
+      }, 0);
+      averageRating = reviewCount > 0 ? Number((totalRating / reviewCount).toFixed(1)) : 0;
+    } else if (internalReviewsResult.length > 0) {
+      // Fall back to internal reviews if we have no Google reviews
+      reviewCount = internalReviewsResult.length;
+      const totalRating = internalReviewsResult.reduce((sum, review) => sum + review.rating, 0);
+      averageRating = reviewCount > 0 ? Number((totalRating / reviewCount).toFixed(1)) : 0;
+    }
     
     return {
       activeJobs,

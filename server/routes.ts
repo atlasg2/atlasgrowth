@@ -5,6 +5,9 @@ import { setupAuth } from "./auth";
 import { format } from "date-fns";
 import { scrypt, randomBytes } from "crypto";
 import { promisify } from "util";
+import { db } from "./db";
+import { eq, and, gte, lte } from "drizzle-orm";
+import { googleReviews } from "@shared/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -12,6 +15,64 @@ async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
+}
+
+// Review analytics utility functions
+function calculateAverage(reviews: { stars?: number | null }[]) {
+  if (reviews.length === 0) return 0;
+  const totalRating = reviews.reduce((sum, review) => {
+    return sum + (review.stars || 0);
+  }, 0);
+  return Number((totalRating / reviews.length).toFixed(1));
+}
+
+function countByRating(reviews: { stars?: number | null }[]) {
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  
+  reviews.forEach(review => {
+    const rating = review.stars || 0;
+    if (rating >= 1 && rating <= 5) {
+      counts[rating as 1|2|3|4|5]++;
+    }
+  });
+  
+  return counts;
+}
+
+function calculateMonthlyTrends(reviews: { publishedAt?: Date | string | null, stars?: number | null }[], startDate: Date) {
+  const months: Record<string, { count: number, totalRating: number, average: number }> = {};
+  
+  // Initialize all months in the past year
+  const now = new Date();
+  let currentDate = new Date(startDate);
+  
+  while (currentDate <= now) {
+    const monthKey = format(currentDate, 'yyyy-MM');
+    months[monthKey] = { count: 0, totalRating: 0, average: 0 };
+    currentDate.setMonth(currentDate.getMonth() + 1);
+  }
+  
+  // Populate data from reviews
+  reviews.forEach(review => {
+    if (!review.publishedAt) return;
+    
+    const reviewDate = new Date(review.publishedAt);
+    if (reviewDate >= startDate) {
+      const monthKey = format(reviewDate, 'yyyy-MM');
+      if (months[monthKey]) {
+        months[monthKey].count++;
+        months[monthKey].totalRating += (review.stars || 0);
+      }
+    }
+  });
+  
+  // Calculate averages
+  Object.keys(months).forEach(month => {
+    const data = months[month];
+    data.average = data.count > 0 ? Number((data.totalRating / data.count).toFixed(1)) : 0;
+  });
+  
+  return months;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -751,6 +812,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const stats = await storage.getContractorStats(req.user.contractorId);
     res.json(stats);
+  });
+  
+  // Review analytics endpoint - returns analysis of reviews over time
+  app.get("/api/reviews/analytics", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.user.contractorId) return res.sendStatus(403);
+    
+    const contractorId = req.user.contractorId;
+    
+    try {
+      // Get all Google reviews for this contractor
+      const reviews = await db
+        .select({
+          id: googleReviews.id,
+          stars: googleReviews.stars,
+          publishedAt: googleReviews.publishedAtDate,
+        })
+        .from(googleReviews)
+        .where(eq(googleReviews.contractorId, contractorId))
+        .orderBy(googleReviews.publishedAtDate);
+      
+      // Get the current date
+      const now = new Date();
+      
+      // Calculate the start date for each time period
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(now.getDate() - 30);
+      
+      const ninetyDaysAgo = new Date(now);
+      ninetyDaysAgo.setDate(now.getDate() - 90);
+      
+      const oneYearAgo = new Date(now);
+      oneYearAgo.setFullYear(now.getFullYear() - 1);
+      
+      // Group reviews by time period
+      const last30Days = reviews.filter(review => 
+        review.publishedAt && new Date(review.publishedAt) >= thirtyDaysAgo
+      );
+      
+      const last90Days = reviews.filter(review => 
+        review.publishedAt && new Date(review.publishedAt) >= ninetyDaysAgo
+      );
+      
+      const lastYear = reviews.filter(review => 
+        review.publishedAt && new Date(review.publishedAt) >= oneYearAgo
+      );
+      
+      // Group by rating for each time period
+      const ratingCounts = {
+        last30Days: countByRating(last30Days),
+        last90Days: countByRating(last90Days),
+        lastYear: countByRating(lastYear), 
+        allTime: countByRating(reviews)
+      };
+      
+      // Calculate monthly trends for the past year
+      const monthlyTrends = calculateMonthlyTrends(reviews, oneYearAgo);
+      
+      res.json({
+        reviewCounts: {
+          last30Days: last30Days.length,
+          last90Days: last90Days.length,
+          lastYear: lastYear.length,
+          allTime: reviews.length
+        },
+        averageRatings: {
+          last30Days: calculateAverage(last30Days),
+          last90Days: calculateAverage(last90Days),
+          lastYear: calculateAverage(lastYear),
+          allTime: calculateAverage(reviews)
+        },
+        ratingCounts,
+        monthlyTrends
+      });
+    } catch (error) {
+      console.error("Error getting review analytics:", error);
+      res.status(500).json({ error: "Failed to get review analytics" });
+    }
   });
   
   // Simple DB test endpoint
