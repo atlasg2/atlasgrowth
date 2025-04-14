@@ -625,6 +625,42 @@ export class DatabaseStorage implements IStorage {
 
   async createContractor(contractor: InsertContractor): Promise<Contractor> {
     const [newContractor] = await db.insert(contractors).values(contractor).returning();
+    
+    // If this is a prospect, automatically create a user account
+    if (contractor.status === 'prospect' || newContractor.status === 'prospect') {
+      try {
+        // Check if a user already exists with this username/slug
+        const existingUser = await db
+          .select()
+          .from(users)
+          .where(eq(users.username, newContractor.slug));
+        
+        if (existingUser.length === 0) {
+          // Generate password hash (using the slug as the password)
+          const salt = randomBytes(16).toString('hex');
+          const buf = await scryptAsync(newContractor.slug, salt, 64) as Buffer;
+          const hashedPassword = `${buf.toString('hex')}.${salt}`;
+          
+          // Create a user account
+          await db.insert(users).values({
+            username: newContractor.slug,
+            password: hashedPassword,
+            email: newContractor.email || `${newContractor.slug}@example.com`,
+            firstName: newContractor.name.split(' ')[0] || '',
+            lastName: newContractor.name.split(' ').slice(1).join(' ') || '',
+            role: 'contractor',
+            active: true,
+            contractorId: newContractor.id
+          });
+          
+          console.log(`Created user account for new prospect: ${newContractor.name} (${newContractor.slug})`);
+        }
+      } catch (error) {
+        console.error(`Error creating user account for contractor ${newContractor.id}:`, error);
+        // Continue anyway - we don't want to fail the contractor creation
+      }
+    }
+    
     return newContractor;
   }
 
