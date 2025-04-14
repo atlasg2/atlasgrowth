@@ -333,6 +333,7 @@ export default function AuthPage() {
                 </Form>
               </TabsContent>
             </Tabs>
+            )}
           </CardContent>
           <CardFooter className="flex justify-center">
             <p className="text-sm text-gray-500">
