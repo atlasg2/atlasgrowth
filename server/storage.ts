@@ -7,7 +7,8 @@ import {
   invoices, type Invoice, type InsertInvoice,
   reviews, type Review, type InsertReview,
   messages, type Message, type InsertMessage,
-  activities, type Activity, type InsertActivity
+  activities, type Activity, type InsertActivity,
+  googleReviews, type GoogleReview, type InsertGoogleReview
 } from "@shared/schema";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
